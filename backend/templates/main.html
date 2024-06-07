@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Алгоритм Флойда-Уоршелла</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif; /* Устанавливает шрифт Arial для всего документа */
+        }
+        svg {
+            border: 1px solid black; /* Устанавливает черную рамку вокруг SVG элемента */
+        }
+        .controls {
+            margin-bottom: 20px; /* Добавляет нижний отступ для блока с элементами управления */
+        }
+        .matrix-container {
+            margin-top: 2px; /* Добавляет верхний отступ для блока с матрицей */
+        }
+        .matrix {
+            border-collapse: collapse; /* Устанавливает границы таблицы */
+            margin-right: 50px;
+        }
+        .data {
+            border-collapse: collapse; /* Устанавливает границы таблицы */
+            margin-right: 500px;
+        }
+    
+        .data td, .data th {
+            border: 1px solid black; /* Устанавливает границы ячеек таблицы */
+            padding: 5px; /* Устанавливает отступы внутри ячеек */
+            text-align: center; /* Выравнивает текст в ячейках по центру */
+        }
+        .matrix td, .matrix th {
+            border: 1px solid black; /* Устанавливает границы ячеек таблицы */
+            padding: 5px; /* Устанавливает отступы внутри ячеек */
+            text-align: center; /* Выравнивает текст в ячейках по центру */
+        }
+        .matrix-containers {
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+    <script src="https://d3js.org/d3.v6.min.js"></script> <!-- Подключает библиотеку D3.js версии 6 -->
+</head>
+<body>
+    <h1>Алгоритм Флойда-Уоршелла</h1> <!-- Заголовок страницы -->
+    <div class="controls"> <!-- Блок с элементами управления -->
+        <button onclick="addVertex()">Добавить вершину</button> <!-- Кнопка для добавления вершины -->
+        <input type="text" id="vertex1" placeholder="Вершина 1"> <!-- Текстовое поле для ввода первой вершины -->
+        <input type="text" id="vertex2" placeholder="Вершина 2"> <!-- Текстовое поле для ввода второй вершины -->
+        <input type="text" id="weight" placeholder="Вес"> <!-- Текстовое поле для ввода веса ребра -->
+        <button onclick="addEdge()">Создать ребро</button> <!-- Кнопка для создания ребра -->
+        <button onclick="sendMatrix()">Результат</button> <!-- Кнопка для вывода результата -->
+    </div>
+    <svg width="800" height="500"></svg> <!-- SVG элемент для отображения графа -->
+    <div class="matrix-containers">
+        <div class="matrix-container" id="matrixContainer"></div><!-- Контейнер для отображения матрицы -->
+        <div class="matrix-container" id="shortestPathContainer">
+        </div> <!-- Контейнер для отображения кратчайших путей -->
+    </div>
+
+    <script>
+        let nodes = []; // Массив для хранения узлов
+        let links = []; // Массив для хранения ребер
+
+        const width = 1420; // Ширина SVG элемента
+        const height = 500; // Высота SVG элемента
+        let vertexCount = 0; // Счетчик вершин
+
+        const svg = d3.select('svg') // Выбирает SVG элемент
+            .attr('width', width) // Устанавливает ширину SVG
+            .attr('height', height); // Устанавливает высоту SVG
+
+        const simulation = d3.forceSimulation(nodes) // Создает симуляцию с использованием массива узлов
+            .force('link', d3.forceLink(links).id(d => d.id).distance(d => 150)) // Добавляет силу связи
+            .force('charge', d3.forceManyBody().strength(-100)) // Добавляет силу отталкивания
+            .force('center', d3.forceCenter(width / 2, height / 2)) // Центрирует граф
+            .on('tick', ticked); // Устанавливает функцию обновления для каждого шага симуляции
+
+        function addVertex() {
+            vertexCount++; // Увеличивает счетчик вершин
+            const newNode = {id: vertexCount.toString()}; // Создает новый узел с уникальным идентификатором
+            nodes.push(newNode); // Добавляет новый узел в массив узлов
+            update(); // Обновляет граф
+        }
+
+        function addEdge() {
+            const vertex1 = document.getElementById('vertex1').value; // Получает значение первой вершины
+            const vertex2 = document.getElementById('vertex2').value; // Получает значение второй вершины
+            const weight = +document.getElementById('weight').value; // Получает значение веса и преобразует его в число
+
+            if (vertex1 === vertex2 && vertex1 && vertex2 && !isNaN(weight)) { // Проверяет, что vertex1 равно vertex2 и данные корректны
+                const newLink = {source: vertex1, target: vertex2, weight: weight}; // Создает новое ребро (петлю)
+                links.push(newLink); // Добавляет новое ребро в массив ребер
+                update(); // Обновляет граф
+            } else if (vertex1 !== vertex2 && vertex1 && vertex2 && !isNaN(weight)) { // Проверяет, что vertex1 не равно vertex2 и данные корректны
+                const newLink1 = {source: vertex1, target: vertex2, weight: weight}; // Создает новое ребро
+                links.push(newLink1); // Добавляет новое ребро в массив ребер
+                update(); // Обновляет граф
+            } else {
+                alert('Введите корректные данные.'); // Выводит предупреждение, если данные некорректны
+            }
+        }
+
+        function update() {
+            const vertex1 = document.getElementById('vertex1').value; // Получает значение первой вершины
+            const vertex2 = document.getElementById('vertex2').value; // Получает значение второй вершины
+
+            const link = svg.selectAll('.link') // Выбирает все существующие ребра
+                .data(links, d => `${d.source.id}-${d.target.id}`); // Связывает их с данными
+
+            link.enter().append('line') // Добавляет новые ребра
+                .attr('class', 'link') // Устанавливает класс для новых ребер
+                .attr('stroke', 'black') // Устанавливает цвет линии
+                .attr('stroke-width', d => "2px") // Устанавливает толщину линии 
+                .merge(link); // Объединяет с существующими ребрами
+
+            link.exit().remove(); // Удаляет ребра, которые больше не существуют
+
+            const node = svg.selectAll('.node') // Выбирает все существующие узлы
+                .data(nodes, d => d.id); // Связывает их с данными
+
+            const nodeEnter = node.enter().append('g')
+                .attr('class', 'node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            nodeEnter.append('circle') // Добавляет круг для каждого нового узла
+                .attr('r', 14) // Устанавливает радиус круга
+                .attr('fill', 'red'); // Устанавливает цвет круга
+
+            nodeEnter.append('text') // Добавляет текст для каждого нового узла
+                .attr('dy', -15) // Устанавливает смещение по вертикали
+                .attr('dx', 15) // Устанавливает смещение по горизонтали
+                .text(d => d.id); // Устанавливает текст равным идентификатору узла
+
+            nodeEnter.merge(node);
+
+            node.exit().remove(); // Удаляет узлы, которые больше не существуют
+
+            const labels = svg.selectAll('.label') // Выбирает все существующие метки
+                .data(links, d => `${d.source.id}-${d.target.id}`); // Связывает их с данными
+
+            if (vertex1 != vertex2 && vertex1 != '' && vertex2 != '') {
+                labels.enter().append('text') // Добавляет новые метки
+                    .attr('class', 'label')
+                    .attr('fill', 'black')
+                    .merge(labels)
+                    .text(d => d.weight);
+            }
+
+            labels.exit().remove(); // Удаляет метки, которые больше не существуют
+            
+            // Обработка петель
+            if (vertex1 == vertex2 && vertex1 != '' && vertex2 != '') {
+                const selfLoops = svg.selectAll('.self-loop')
+                    .data(links.filter(d => d.source.id === d.target.id), d => d.source.id);
+
+                selfLoops.enter().append('path')
+                    .attr('class', 'self-loop')
+                    .attr('fill', 'none')
+                    .attr('stroke', 'black')
+                    .attr('stroke-width', '2px')
+                    .merge(selfLoops);
+
+                selfLoops.exit().remove();
+
+                const selfLoopLabels = svg.selectAll('.self-loop-label')
+                    .data(links.filter(d => d.source.id === d.target.id), d => d.source.id);
+
+                selfLoopLabels.enter().append('text')
+                    .attr('class', 'self-loop-label')
+                    .attr('fill', 'black')
+                    .merge(selfLoopLabels)
+                    .text(d => d.weight);
+
+                selfLoopLabels.exit().remove();
+            }
+            simulation.nodes(nodes);
+            simulation.force('link').links(links);
+            result();
+            simulation.alpha(1).restart();
+        }
+
+        function ticked() {
+            svg.selectAll('.link')
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+
+            svg.selectAll('.node')
+                .attr('transform', d => `translate(${d.x},${d.y})`);
+
+            svg.selectAll('.label')
+                .attr('x', d => (d.source.x + d.target.x) / 2)
+                .attr('y', d => (d.source.y + d.target.y) / 2);
+
+            svg.selectAll('.self-loop')
+                .attr('d', d => {
+                    const x = d.source.x;
+                    const y = d.source.y;
+                    const dx = 30; // Глубина дуги
+                    const dy = 50; // Высота дуги
+                    return `M${x},${y} C${x + dx},${y - dy} ${x - dx},${y - dy} ${x},${y}`;
+                });
+
+            svg.selectAll('.self-loop-label')
+                .attr('x', d => d.source.x)
+                .attr('y', d => d.source.y - 60);
+        }
+
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+        function getMatr() {
+            let matr = [];
+            for (let i = 0; i < nodes.length; i++) {
+                let row = [];
+                for (let j = 0; j < nodes.length; j++) {
+                    row.push(0);
+                }
+                matr.push(row);
+            }
+            for (let i = 0; i < links.length; i++) {
+                matr[(+links[i].source.id) - 1][(+links[i].target.id) - 1] = links[i].weight;
+
+            }
+            return matr;
+        }
+
+        function result() {
+            let matr = getMatr();
+
+            // Очистка контейнера перед добавлением новой матрицы
+            const matrixContainer = document.getElementById('matrixContainer');
+            matrixContainer.innerHTML = '';
+
+            // Создание таблицы
+            const table = document.createElement('table');
+            table.classList.add('matrix');
+
+            // Создание заголовков
+            const headerRow = document.createElement('tr');
+            headerRow.appendChild(document.createElement('th'));
+            for (let i = 0; i < nodes.length; i++) {
+                const th = document.createElement('th');
+                th.textContent = nodes[i].id;
+                headerRow.appendChild(th);
+            }
+            table.appendChild(headerRow);
+
+            // Создание строк матрицы
+            for (let i = 0; i < matr.length; i++) {
+                const row = document.createElement('tr');
+                const th = document.createElement('th');
+                th.textContent = nodes[i].id;
+                row.appendChild(th);
+                for (let j = 0; j < matr[i].length; j++) {
+                    const cell = document.createElement('td');
+                    cell.textContent = matr[i][j];
+                    row.appendChild(cell);
+                }
+                table.appendChild(row);
+            }
+
+            // Добавление таблицы в контейнер
+            matrixContainer.appendChild(table);
+        }
+
+        function displayShortestPaths(data) {
+            const shortestPathContainer = document.getElementById('shortestPathContainer');
+            shortestPathContainer.innerHTML = '';
+            // Создание надписи
+            const label = document.createElement('p');
+            label.textContent = "Матрица кратчайших путей:"; // Замените на ваш текст
+            shortestPathContainer.appendChild(label);
+
+            // Создание таблицы
+            const table = document.createElement('table');
+            table.classList.add('data');
+
+            // Создание заголовков
+            const headerRow = document.createElement('tr');
+            headerRow.appendChild(document.createElement('th'));
+            for (let i = 0; i < nodes.length; i++) {
+                const th = document.createElement('th');
+                th.textContent = nodes[i].id;
+                headerRow.appendChild(th);
+            }
+            table.appendChild(headerRow);
+
+            // Создание строк матрицы
+            for (let i = 0; i < data.length; i++) {
+                const row = document.createElement('tr');
+                const th = document.createElement('th');
+                th.textContent = nodes[i].id;
+                row.appendChild(th);
+                for (let j = 0; j < data[i].length; j++) {
+                    const cell = document.createElement('td');
+                    if (data[i][j] == 2147483647){
+                        cell.textContent = 'x';
+                    }else{
+                        cell.textContent = data[i][j];
+                    }
+                    row.appendChild(cell);
+                }
+                table.appendChild(row);
+            }
+            // Добавление таблицы в контейнер
+            shortestPathContainer.appendChild(table);
+        }
+
+        function sendMatrix() {
+            let matrix = getMatr();
+            let resp;
+            fetch('/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ matrix }) // Отправляем матрицу как JSON
+            })
+            .then(response => response.json())
+            .then(data => { 
+                console.log('Success:', data);
+                displayShortestPaths(data.result); // Вывод данных из ответа в диалоговом окне
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        
+    </script>
+</body>
+</html>
